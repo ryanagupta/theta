@@ -247,6 +247,15 @@ function main() {
     return;
   }
 
+  // Auto-sync global ~/.pi/agent on first run if missing
+  const agentDir = getPiAgentDir();
+  const globalTeach = path.join(agentDir, "skills", "teach", "SKILL.md");
+  if (!fs.existsSync(globalTeach)) {
+    try {
+      setupGlobal();
+    } catch {}
+  }
+
   launchTheta(args);
 }
 

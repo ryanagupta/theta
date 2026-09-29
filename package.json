@@ -12,8 +12,7 @@
   "scripts": {
     "start": "node ./bin/theta.js",
     "setup": "node ./bin/theta.js setup",
-    "doctor": "node ./bin/theta.js doctor",
-    "postinstall": "node ./bin/postinstall.js"
+    "doctor": "node ./bin/theta.js doctor"
   },
   "keywords": [
     "pi",
