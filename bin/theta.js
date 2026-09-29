@@ -52,7 +52,21 @@ function findPiRunner() {
     }
   } catch {}
 
-  // 4. Default command
+  // 4. If pi is not installed anywhere on the system, automatically install it for the user
+  console.log("\x1b[36m%s\x1b[0m", "pi coding agent engine not found. Performing one-time installation...");
+  try {
+    execSync("npm install -g @earendil-works/pi-coding-agent", { stdio: "inherit" });
+    console.log("\x1b[32m%s\x1b[0m", "✓ pi installed successfully!");
+
+    // Re-check npm global root
+    const globalRoot = execSync("npm root -g", { encoding: "utf-8", stdio: ["pipe", "pipe", "ignore"] }).trim();
+    const cli = path.join(globalRoot, "@earendil-works", "pi-coding-agent", "dist", "cli.js");
+    if (fs.existsSync(cli)) return { type: "node", path: cli };
+  } catch (err) {
+    console.warn("Could not auto-install pi. Please run manually: npm install -g @earendil-works/pi-coding-agent");
+  }
+
+  // 5. Default command
   return { type: "bin", path: process.platform === "win32" ? "pi.cmd" : "pi" };
 }
 

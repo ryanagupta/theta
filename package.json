@@ -30,8 +30,13 @@
   ],
   "author": "theta",
   "license": "MIT",
-  "dependencies": {
+  "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.50.0"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
   },
   "files": [
     "bin",

@@ -38,34 +38,10 @@ function copyDirectoryRecursive(src, dest) {
   }
 }
 
-import { execSync } from "node:child_process";
-
-// 1. Ensure @earendil-works/pi-coding-agent is installed globally so 'pi' is always available
-try {
-  let hasPi = false;
-  try {
-    const checkCmd = process.platform === "win32" ? "where.exe pi" : "which pi";
-    execSync(checkCmd, { stdio: "ignore" });
-    hasPi = true;
-  } catch {
-    hasPi = false;
-  }
-
-  if (!hasPi) {
-    console.log("No global 'pi' binary found. Automatically installing @earendil-works/pi-coding-agent...");
-    execSync("npm install -g @earendil-works/pi-coding-agent", { stdio: "inherit" });
-    console.log("✓ Global 'pi' installed successfully!");
-  }
-} catch (e) {
-  // If npm install -g fails (e.g. permission issues), theta.js will fallback to bundled node_modules
-}
-
-// 2. Sync theta skills, extensions, and examiner agents into ~/.pi/agent/
 try {
   const agentDir = getPiAgentDir();
-  if (fs.existsSync(path.dirname(agentDir)) || fs.existsSync(agentDir)) {
-    console.log("Integrating θ (theta) into global pi configuration (~/.pi/agent)...");
-
+  const agentParent = path.dirname(agentDir);
+  if (fs.existsSync(agentParent) || fs.existsSync(agentDir)) {
     const targets = [
       { src: path.join(BUNDLED_PI_DIR, "skills"), dest: path.join(agentDir, "skills") },
       { src: path.join(BUNDLED_PI_DIR, "extensions"), dest: path.join(agentDir, "extensions") },
@@ -80,5 +56,7 @@ try {
     console.log("✓ θ (theta) ready system-wide! Run 'learn' anywhere to start learning.");
   }
 } catch (err) {
-  console.log("Note: Run 'learn setup' to finish configuring global extensions.");
+  // Silent fallback so postinstall never interrupts npm install
 }
+
+process.exit(0);
