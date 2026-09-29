@@ -182,25 +182,54 @@ function printHelp() {
 function launchTheta(args) {
   const runner = findPiRunner();
 
-  // Extensions and skills to load
-  const extQuiz = path.join(BUNDLED_PI_DIR, "extensions", "quiz.ts");
-  const extMdLog = path.join(BUNDLED_PI_DIR, "extensions", "md-log.ts");
-  const extAsk = path.join(BUNDLED_PI_DIR, "extensions", "ask-user-question.ts");
-  const extVisual = path.join(BUNDLED_PI_DIR, "extensions", "visual-tools", "index.ts");
-  const skillTeach = path.join(BUNDLED_PI_DIR, "skills", "teach");
-  const skillVisualize = path.join(BUNDLED_PI_DIR, "skills", "visualize");
+  const agentDir = getPiAgentDir();
+  const cwd = process.cwd();
 
   const piArgs = [];
 
-  // Add extensions if present
-  if (fs.existsSync(extQuiz)) piArgs.push("--extension", extQuiz);
-  if (fs.existsSync(extMdLog)) piArgs.push("--extension", extMdLog);
-  if (fs.existsSync(extAsk)) piArgs.push("--extension", extAsk);
-  if (fs.existsSync(extVisual)) piArgs.push("--extension", extVisual);
+  // Helper: check if an extension is already discoverable by pi
+  const isExtensionLoadedByPi = (filename) => {
+    // 1. Project-local .pi/extensions/filename
+    if (fs.existsSync(path.join(cwd, ".pi", "extensions", filename))) return true;
+    // 2. Global ~/.pi/agent/extensions/filename
+    if (fs.existsSync(path.join(agentDir, "extensions", filename))) return true;
+    return false;
+  };
 
-  // Add skills if present
-  if (fs.existsSync(skillTeach)) piArgs.push("--skill", skillTeach);
-  if (fs.existsSync(skillVisualize)) piArgs.push("--skill", skillVisualize);
+  // Helper: check if a skill is already discoverable by pi
+  const isSkillLoadedByPi = (skillName) => {
+    // 1. Project-local .pi/skills/skillName
+    if (fs.existsSync(path.join(cwd, ".pi", "skills", skillName))) return true;
+    // 2. Global ~/.pi/agent/skills/skillName
+    if (fs.existsSync(path.join(agentDir, "skills", skillName))) return true;
+    return false;
+  };
+
+  // Add extensions only if not already loaded by pi
+  const extMap = [
+    { name: "quiz.ts", path: path.join(BUNDLED_PI_DIR, "extensions", "quiz.ts") },
+    { name: "md-log.ts", path: path.join(BUNDLED_PI_DIR, "extensions", "md-log.ts") },
+    { name: "ask-user-question.ts", path: path.join(BUNDLED_PI_DIR, "extensions", "ask-user-question.ts") },
+    { name: "visual-tools", path: path.join(BUNDLED_PI_DIR, "extensions", "visual-tools", "index.ts") },
+  ];
+
+  for (const ext of extMap) {
+    if (fs.existsSync(ext.path) && !isExtensionLoadedByPi(ext.name)) {
+      piArgs.push("--extension", ext.path);
+    }
+  }
+
+  // Add skills only if not already loaded by pi
+  const skillsMap = [
+    { name: "teach", path: path.join(BUNDLED_PI_DIR, "skills", "teach") },
+    { name: "visualize", path: path.join(BUNDLED_PI_DIR, "skills", "visualize") },
+  ];
+
+  for (const sk of skillsMap) {
+    if (fs.existsSync(sk.path) && !isSkillLoadedByPi(sk.name)) {
+      piArgs.push("--skill", sk.path);
+    }
+  }
 
   // Pass remaining user arguments
   piArgs.push(...args);
