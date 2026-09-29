@@ -205,6 +205,19 @@ export default function mdLog(pi: ExtensionAPI) {
 
 	function answerCalloutQuiz(details: any): string {
 		const status = details?.status;
+		if (status === "side-question") {
+			const body: string[] = [];
+			if (details.question) {
+				body.push(`**Problem paused:** ${cleanMarkdownMath(details.question)}`);
+				body.push("");
+			}
+			if (details.studentQuestion) {
+				body.push(`**Your Question:** ${cleanMarkdownMath(details.studentQuestion)}`);
+				body.push("");
+			}
+			body.push("*(Tutor explaining concept from first principles — resumes upon `continue`)*");
+			return callout("note", "💡 Side Note: Question Paused for Clarification", body);
+		}
 		if (status === "cancelled") {
 			return callout("warning", "Question — Skipped", ["(user skipped)"]);
 		}
@@ -467,6 +480,25 @@ export default function mdLog(pi: ExtensionAPI) {
 					: "";
 			const trimmed = stripSkillBlocks(text.trim());
 			if (!trimmed) return;
+
+			if (trimmed.includes("[SIDE NOTE / CONCEPT CLARIFICATION REQUEST]")) {
+				const match = trimmed.match(/"([^"]+)"/);
+				const sideQ = match ? match[1] : trimmed;
+				const block = callout("note", "💡 Side Clarification Requested", [
+					`**Your Question:** ${cleanMarkdownMath(sideQ)}`,
+				]);
+				await withLock(() => appendToFile(block));
+				return;
+			}
+
+			if (trimmed.includes("[RESUME MAIN LESSON]")) {
+				const block = callout("tip", "🔄 Resuming Main Lesson", [
+					"Clarification complete — continuing lesson.",
+				]);
+				await withLock(() => appendToFile(block));
+				return;
+			}
+
 			await withLock(() => appendToFile(userBlock(trimmed)));
 			return;
 		}

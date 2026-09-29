@@ -55,12 +55,14 @@ const DONT_KNOW_INDEX = 0;
 
 interface QuizResponse {
 	dontKnow: boolean;
+	sideQuestion?: boolean;
+	sideQuestionText?: string;
 	note?: string;
 	answers: OptionAnswer[];
 	freeText?: string;
 }
 
-type QuizStatus = "answered" | "cancelled" | "unavailable";
+type QuizStatus = "answered" | "cancelled" | "unavailable" | "side-question";
 type QuizMode = "single-select" | "multi-select" | "exam-working";
 
 interface DisplayedOption {
@@ -80,6 +82,7 @@ interface QuizResultDetails {
 	options?: DisplayedOption[];
 	correct?: boolean;
 	dontKnow?: boolean;
+	studentQuestion?: string;
 	note?: string;
 	freeText?: string;
 	markScheme?: MarkSchemePoint[];
@@ -319,6 +322,21 @@ function pushDontKnowRow(lines: string[], theme: any, width: number, focused: bo
 	lines.push(truncateToWidth(`${prefix}${styled}`, width));
 }
 
+function pushSideQuestionRow(lines: string[], theme: any, width: number, focused: boolean): void {
+	lines.push("");
+	const label = "💡 [?] Ask a side question / clarification (/side)";
+	const prefix = focused ? theme.fg("accent", "> ") : "  ";
+	const styled = focused ? theme.fg("accent", label) : theme.fg("dim", label);
+	lines.push(truncateToWidth(`${prefix}${styled}`, width));
+}
+
+function pushSideQuestionEditor(lines: string[], theme: any, width: number, editor: Editor): void {
+	lines.push("");
+	const label = theme.fg("accent", "💡 Your question (e.g. where did -1 come from in that equation?):");
+	addWrapped(lines, label, width, " ");
+	for (const line of editor.render(width)) lines.push(line);
+}
+
 function pushNoteField(lines: string[], theme: any, width: number, editor: Editor, focused: boolean): void {
 	lines.push("");
 	const label = focused ? theme.fg("accent", "Note (optional):") : theme.fg("muted", "Note (optional):");
@@ -384,6 +402,16 @@ async function askExamWorking(
 
 				if (matchesKey(data, Key.enter)) {
 					userSubmittedWorking = workingEditor.getText().trim();
+					if (userSubmittedWorking.startsWith("/side") || userSubmittedWorking.startsWith("/sidenote") || userSubmittedWorking.startsWith("?")) {
+						const cleaned = userSubmittedWorking.replace(/^(\/sidenote|\/side|\?)\s*/, "").trim();
+						done({
+							dontKnow: false,
+							sideQuestion: true,
+							sideQuestionText: cleaned || "Where did that term/step come from in the problem?",
+							answers: [],
+						});
+						return;
+					}
 					phase = "markScheme";
 					refresh();
 					return;
@@ -405,7 +433,7 @@ async function askExamWorking(
 					add(theme.fg("accent", " Your Answer / Key Working Steps:"));
 					for (const line of workingEditor.render(width)) lines.push(line);
 					lines.push("");
-					add(theme.fg("dim", " Type answer • Ctrl+J newline • Enter submit to view Mark Scheme • Esc cancel"));
+					add(theme.fg("dim", " Type answer • /side <question> to pause for clarification • Enter submit • Esc cancel"));
 					add(theme.fg("accent", "─".repeat(width)));
 					cachedLines = lines;
 					cachedWidth = width;
@@ -478,16 +506,18 @@ async function askSingleChoice(
 		id: `option:${index}`,
 		index: index + 1,
 	}));
-	const dontKnowNav = allOptions.length;
+	const sideNav = allOptions.length;
+	const dontKnowNav = allOptions.length + 1;
 
 	return ctx.ui.custom<QuizResponse | null>(
 		(tui: any, theme: any, _kb: any, done: (result: QuizResponse | null) => void) => {
 			let optionIndex = 0;
 			let phase: "select" | "feedback" = "select";
-			let focus: "options" | "note" = "options";
+			let focus: "options" | "note" | "side" = "options";
 			let chosen: OptionAnswer | null = null;
 			let dontKnow = false;
 			const editor = makeNoteEditor(tui, theme);
+			const sideEditor = makeNoteEditor(tui, theme);
 			let cachedLines: string[] | undefined;
 			let cachedWidth = -1;
 
@@ -501,9 +531,17 @@ async function askSingleChoice(
 				return t.length ? t : undefined;
 			}
 
+			function toSideQuestion() {
+				focus = "side";
+				editor.focused = false;
+				sideEditor.focused = true;
+				refresh();
+			}
+
 			function toOptions() {
 				focus = "options";
 				editor.focused = false;
+				sideEditor.focused = false;
 				refresh();
 			}
 
@@ -519,6 +557,30 @@ async function askSingleChoice(
 					if (matchesKey(data, Key.enter) || matchesKey(data, Key.escape)) {
 						done(response());
 					}
+					return;
+				}
+
+				if (focus === "side") {
+					if (matchesKey(data, Key.enter)) {
+						const text = sideEditor.getText().trim();
+						if (text.length > 0) {
+							done({
+								dontKnow: false,
+								sideQuestion: true,
+								sideQuestionText: text,
+								answers: [],
+							});
+							return;
+						}
+						toOptions();
+						return;
+					}
+					if (matchesKey(data, Key.escape)) {
+						toOptions();
+						return;
+					}
+					sideEditor.handleInput(data);
+					tui.requestRender();
 					return;
 				}
 
@@ -539,6 +601,11 @@ async function askSingleChoice(
 					return;
 				}
 
+				if (data === "?" || data === "s" || data === "S") {
+					toSideQuestion();
+					return;
+				}
+
 				if (matchesKey(data, Key.up)) {
 					optionIndex = Math.max(0, optionIndex - 1);
 					refresh();
@@ -550,6 +617,10 @@ async function askSingleChoice(
 					return;
 				}
 				if (matchesKey(data, Key.enter)) {
+					if (optionIndex === sideNav) {
+						toSideQuestion();
+						return;
+					}
 					if (optionIndex === dontKnowNav) {
 						dontKnow = true;
 						chosen = null;
@@ -602,17 +673,23 @@ async function askSingleChoice(
 					add(`${prefix}${styled}`);
 				}
 
+				pushSideQuestionRow(lines, theme, width, focus === "options" && optionIndex === sideNav);
+				if (focus === "side") {
+					pushSideQuestionEditor(lines, theme, width, sideEditor);
+				}
 				pushDontKnowRow(lines, theme, width, focus === "options" && optionIndex === dontKnowNav);
 				pushNoteField(lines, theme, width, editor, focus === "note");
 
 				lines.push("");
-				if (focus === "note") {
+				if (focus === "side") {
+					add(theme.fg("accent", " Type question • Enter ask tutor • Esc cancel"));
+				} else if (focus === "note") {
 					add(theme.fg("dim", " Type note • Ctrl+J newline • Enter back to options • Tab options • Esc back"));
 				} else {
-					add(theme.fg("dim", " ↑↓ navigate • Enter answer • Tab note • Esc cancel"));
+					add(theme.fg("dim", " ↑↓ navigate • Enter select • ?: side question • Tab note • Esc cancel"));
 				}
 				add(theme.fg("accent", "─".repeat(width)));
-				if (focus !== "note") {
+				if (focus === "options") {
 					cachedLines = lines;
 					cachedWidth = width;
 				}
@@ -624,6 +701,7 @@ async function askSingleChoice(
 				invalidate: () => {
 					cachedLines = undefined;
 					editor.invalidate();
+					sideEditor.invalidate();
 				},
 				handleInput,
 			};
@@ -642,6 +720,7 @@ async function askMultiChoice(
 	explanation: string | undefined,
 ): Promise<QuizResponse | null> {
 	const DONT_KNOW_ID = "dont-know";
+	const SIDE_QUESTION_ID = "side-question";
 	const choiceItems: DisplayOption[] = options.map((option, index) => ({
 		...option,
 		id: `option:${index}`,
@@ -653,15 +732,22 @@ async function askMultiChoice(
 		value: DONT_KNOW_VALUE,
 		index: DONT_KNOW_INDEX,
 	};
+	const sideQuestionItem: DisplayOption = {
+		id: SIDE_QUESTION_ID,
+		label: "Ask a side question / clarification (/side)",
+		value: "__side_question__",
+		index: -2,
+	};
 	const submitItem: DisplayOption = { id: "submit", label: "Submit", value: "__submit__", index: -1, isSubmit: true };
-	const allItems: DisplayOption[] = [...choiceItems, dontKnowItem, submitItem];
+	const allItems: DisplayOption[] = [...choiceItems, dontKnowItem, sideQuestionItem, submitItem];
 
 	return ctx.ui.custom<QuizResponse | null>(
 		(tui: any, theme: any, _kb: any, done: (result: QuizResponse | null) => void) => {
 			let optionIndex = 0;
 			let phase: "select" | "feedback" = "select";
-			let focus: "options" | "note" = "options";
+			let focus: "options" | "note" | "side" = "options";
 			const editor = makeNoteEditor(tui, theme);
+			const sideEditor = makeNoteEditor(tui, theme);
 			let cachedLines: string[] | undefined;
 			let cachedWidth = -1;
 			const selected = new Map<string, OptionAnswer>();
@@ -676,9 +762,17 @@ async function askMultiChoice(
 				return t.length ? t : undefined;
 			}
 
+			function toSideQuestion() {
+				focus = "side";
+				editor.focused = false;
+				sideEditor.focused = true;
+				refresh();
+			}
+
 			function toOptions() {
 				focus = "options";
 				editor.focused = false;
+				sideEditor.focused = false;
 				refresh();
 			}
 
@@ -726,6 +820,30 @@ async function askMultiChoice(
 					return;
 				}
 
+				if (focus === "side") {
+					if (matchesKey(data, Key.enter)) {
+						const text = sideEditor.getText().trim();
+						if (text.length > 0) {
+							done({
+								dontKnow: false,
+								sideQuestion: true,
+								sideQuestionText: text,
+								answers: [],
+							});
+							return;
+						}
+						toOptions();
+						return;
+					}
+					if (matchesKey(data, Key.escape)) {
+						toOptions();
+						return;
+					}
+					sideEditor.handleInput(data);
+					tui.requestRender();
+					return;
+				}
+
 				if (matchesKey(data, Key.tab)) {
 					focus = focus === "options" ? "note" : "options";
 					editor.focused = focus === "note";
@@ -743,6 +861,11 @@ async function askMultiChoice(
 					return;
 				}
 
+				if (data === "?" || data === "s" || data === "S") {
+					toSideQuestion();
+					return;
+				}
+
 				if (matchesKey(data, Key.up)) {
 					optionIndex = Math.max(0, optionIndex - 1);
 					refresh();
@@ -755,6 +878,13 @@ async function askMultiChoice(
 				}
 
 				const current = allItems[optionIndex];
+				if (current.id === SIDE_QUESTION_ID) {
+					if (matchesKey(data, Key.enter) || matchesKey(data, Key.space)) {
+						toSideQuestion();
+						return;
+					}
+				}
+
 				if (matchesKey(data, Key.space)) {
 					if (current.isSubmit) return;
 					toggleOption(current);
@@ -814,6 +944,14 @@ async function askMultiChoice(
 						continue;
 					}
 
+					if (item.id === SIDE_QUESTION_ID) {
+						pushSideQuestionRow(lines, theme, width, isFocused);
+						if (focus === "side") {
+							pushSideQuestionEditor(lines, theme, width, sideEditor);
+						}
+						continue;
+					}
+
 					if (item.id === DONT_KNOW_ID) {
 						lines.push("");
 						const checked = selected.has(item.id);
@@ -823,6 +961,8 @@ async function askMultiChoice(
 						continue;
 					}
 
+					const checked = selected.has(item.id);
+					const marker = checked ? "[x]" : "[ ]";
 					const cleanLabel = cleanCliMath(item.label);
 					const label = `${marker} ${item.index}. ${cleanLabel}`;
 					const styled = isFocused ? theme.fg("accent", label) : theme.fg(checked ? "success" : "text", label);
@@ -832,16 +972,18 @@ async function askMultiChoice(
 				pushNoteField(lines, theme, width, editor, focus === "note");
 
 				lines.push("");
-				if (selected.size === 0) {
-					add(theme.fg("warning", " Select at least one answer before submitting."));
-				}
-				if (focus === "note") {
+				if (focus === "side") {
+					add(theme.fg("accent", " Type question • Enter ask tutor • Esc cancel"));
+				} else if (focus === "note") {
 					add(theme.fg("dim", " Type note • Ctrl+J newline • Enter back to options • Tab options • Esc back"));
 				} else {
-					add(theme.fg("dim", " ↑↓ navigate • Space toggle • Enter submit • Tab note • Esc cancel"));
+					if (selected.size === 0) {
+						add(theme.fg("warning", " Select at least one answer before submitting."));
+					}
+					add(theme.fg("dim", " ↑↓ navigate • Space toggle • Enter submit • ?: side question • Tab note • Esc cancel"));
 				}
 				add(theme.fg("accent", "─".repeat(width)));
-				if (focus !== "note") {
+				if (focus === "options") {
 					cachedLines = lines;
 					cachedWidth = width;
 				}
@@ -853,6 +995,7 @@ async function askMultiChoice(
 				invalidate: () => {
 					cachedLines = undefined;
 					editor.invalidate();
+					sideEditor.invalidate();
 				},
 				handleInput,
 			};
@@ -1007,6 +1150,26 @@ export default function quiz(pi: ExtensionAPI) {
 						};
 					}
 
+					if (response.sideQuestion) {
+						const sideQ = response.sideQuestionText || response.freeText || "Clarification requested";
+						return {
+							content: [{
+								type: "text",
+								text: `[STUDENT PAUSED EXAM QUESTION FOR A SIDE CLARIFICATION]:\n"${sideQ}"\n\nINSTRUCTIONS FOR TUTOR:\n1. Answer the student's question directly and concisely from first principles (e.g. explain where that specific term, coefficient, rule, or sign comes from).\n2. DO NOT reveal the final solution or mark scheme for this exam question yet.\n3. Instruct the student to type 'continue' when they are ready to resume this exam question.`,
+							}],
+							details: {
+								status: "side-question",
+								studentQuestion: sideQ,
+								question: params.question,
+								tier,
+								marks,
+								context,
+								mode: "exam-working",
+								explanation,
+							},
+						};
+					}
+
 					let text = `User completed exam-style question [${tier || "Tier 3"}] [${marks || "?"} Marks].`;
 					if (response.freeText) text += `\nStudent Working: ${response.freeText}`;
 					if (params.markScheme && params.markScheme.length > 0) {
@@ -1078,6 +1241,28 @@ export default function quiz(pi: ExtensionAPI) {
 					return {
 						content: [{ type: "text", text: "User cancelled the quiz" }],
 						details: { status: "cancelled", question: params.question, tier, marks, mode, answers: [], correctIndices },
+					};
+				}
+
+				if (response.sideQuestion) {
+					const sideQ = response.sideQuestionText || response.note || "Clarification requested";
+					return {
+						content: [{
+							type: "text",
+							text: `[STUDENT PAUSED THIS QUIZ QUESTION TO ASK A SIDE CLARIFICATION]:\n"${sideQ}"\n\nINSTRUCTIONS FOR TUTOR:\n1. Answer the student's question directly and concisely from first principles (e.g. explain where that specific term, number, or rule comes from).\n2. DO NOT reveal the correct option or final answer to this quiz question.\n3. Instruct the student to type 'continue' when they are ready to resume this quiz question.`,
+						}],
+						details: {
+							status: "side-question",
+							studentQuestion: sideQ,
+							question: params.question,
+							tier,
+							marks,
+							context,
+							mode,
+							answers: [],
+							correctIndices,
+							explanation,
+						},
 					};
 				}
 

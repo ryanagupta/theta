@@ -123,10 +123,12 @@ function runDoctor() {
   const skillsExist = fs.existsSync(path.join(BUNDLED_PI_DIR, "skills", "teach", "SKILL.md"));
   const quizExist = fs.existsSync(path.join(BUNDLED_PI_DIR, "extensions", "quiz.ts"));
   const mdLogExist = fs.existsSync(path.join(BUNDLED_PI_DIR, "extensions", "md-log.ts"));
+  const sideNoteExist = fs.existsSync(path.join(BUNDLED_PI_DIR, "extensions", "side-note.ts"));
   console.log(`Theta bundled assets:`);
   console.log(`  - teach skill: ${skillsExist ? "\x1b[32mOK\x1b[0m" : "\x1b[31mMISSING\x1b[0m"}`);
   console.log(`  - quiz extension: ${quizExist ? "\x1b[32mOK\x1b[0m" : "\x1b[31mMISSING\x1b[0m"}`);
   console.log(`  - md-log extension: ${mdLogExist ? "\x1b[32mOK\x1b[0m" : "\x1b[31mMISSING\x1b[0m"}`);
+  console.log(`  - side-note extension: ${sideNoteExist ? "\x1b[32mOK\x1b[0m" : "\x1b[31mMISSING\x1b[0m"}`);
 
   // 4. Global ~/.pi/agent status
   const agentDir = getPiAgentDir();
@@ -172,10 +174,14 @@ function printHelp() {
   # Forward any custom flags to pi
   theta --model openrouter/anthropic/claude-3.5-sonnet
 
-\x1b[1mOBSIDIAN MIRRORING:\x1b[0m
-  Inside any theta session, type:
+\x1b[1mSLASH COMMANDS & WORKFLOWS:\x1b[0m
+  Inside any theta session:
+    \x1b[35m/side <question>\x1b[0m (or \x1b[35m/sidenote\x1b[0m)
+      Ask a concept question (e.g. "where did -1 come from?") without losing context.
+      Type \x1b[35mcontinue\x1b[0m (or \x1b[35m/continue\x1b[0m) when ready to resume!
+
     \x1b[35m/md-log "C:\\path\\to\\your\\notes\\calculus.md"\x1b[0m
-  to live-stream equations, derivations, and quiz feedback straight into Obsidian!
+      Live-stream equations, derivations, side notes, and quiz feedback to Obsidian!
 `);
 }
 
@@ -209,6 +215,7 @@ function launchTheta(args) {
   const extMap = [
     { name: "quiz.ts", path: path.join(BUNDLED_PI_DIR, "extensions", "quiz.ts") },
     { name: "md-log.ts", path: path.join(BUNDLED_PI_DIR, "extensions", "md-log.ts") },
+    { name: "side-note.ts", path: path.join(BUNDLED_PI_DIR, "extensions", "side-note.ts") },
     { name: "ask-user-question.ts", path: path.join(BUNDLED_PI_DIR, "extensions", "ask-user-question.ts") },
     { name: "visual-tools", path: path.join(BUNDLED_PI_DIR, "extensions", "visual-tools", "index.ts") },
   ];
