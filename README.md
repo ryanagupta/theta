@@ -87,7 +87,7 @@ You can install `theta` globally from anywhere using `npm`:
 npm install -g .
 
 # Or from git:
-npm install -g https://github.com/<your-username>/theta
+npm install -g https://github.com/ryanagupta/theta
 ```
 
 This registers the global CLI commands **`theta-learn`** and **`learn`** (as well as `theta`).
