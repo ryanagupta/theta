@@ -1,0 +1,7 @@
+node_modules/
+amos_learn/
+maths/
+*.tgz
+*.log
+.DS_Store
+Thumbs.db

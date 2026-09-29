@@ -1,0 +1,42 @@
+{
+  "name": "theta-learn",
+  "version": "1.0.0",
+  "description": "High-performance A-Level STEM learning harness for pi (UK Edexcel, OCR A, AQA)",
+  "type": "module",
+  "bin": {
+    "theta-learn": "bin/theta.js",
+    "learn": "bin/theta.js",
+    "theta": "bin/theta.js"
+  },
+  "main": "./bin/theta.js",
+  "scripts": {
+    "start": "node ./bin/theta.js",
+    "setup": "node ./bin/theta.js setup",
+    "doctor": "node ./bin/theta.js doctor",
+    "postinstall": "node ./bin/postinstall.js"
+  },
+  "keywords": [
+    "pi",
+    "a-level",
+    "stem",
+    "mathematics",
+    "physics",
+    "chemistry",
+    "education",
+    "tutoring",
+    "obsidian",
+    "katex",
+    "quiz"
+  ],
+  "author": "theta",
+  "license": "MIT",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.50.0"
+  },
+  "files": [
+    "bin",
+    ".pi",
+    "README.md",
+    "LICENSE"
+  ]
+}
